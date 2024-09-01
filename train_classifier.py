@@ -56,7 +56,8 @@ def main():
         logger.info('{} Net\tModality: {}'.format(args.models[m].model, m))
         # notice that here, the first parameter passed is the input dimension
         # In our case it represents the feature dimensionality which is equivalent to 1024 for I3D
-        models[m] = getattr(model_list, args.models[m].model)()
+        action_conf = getattr(args, args.action)
+        models[m] = getattr(model_list, args.models[m].model)(num_classes, action_conf.num_clips)
 
     # the models are wrapped into the ActionRecognition task which manages all the training steps
     action_classifier = tasks.ActionRecognition("action-classifier", models, args.batch_size,
@@ -80,17 +81,17 @@ def main():
                                                    num_workers=args.dataset.workers, pin_memory=True, drop_last=True)
 
         val_loader = torch.utils.data.DataLoader(EpicKitchensDataset(args.dataset.shift.split("-")[-1], modalities,
-                                                                     'val', args.dataset, None, None, None,
+                                                                     'test', args.dataset, None, None, None,
                                                                      None, load_feat=True),
                                                  batch_size=args.batch_size, shuffle=False,
                                                  num_workers=args.dataset.workers, pin_memory=True, drop_last=False)
         train(action_classifier, train_loader, val_loader, device, num_classes)
 
-    elif args.action == "validate":
+    elif args.action == "test":
         if args.resume_from is not None:
             action_classifier.load_last_model(args.resume_from)
         val_loader = torch.utils.data.DataLoader(EpicKitchensDataset(args.dataset.shift.split("-")[-1], modalities,
-                                                                     'val', args.dataset, None, None, None,
+                                                                     'test', args.dataset, None, None, None,
                                                                      None, load_feat=True),
                                                  batch_size=args.batch_size, shuffle=False,
                                                  num_workers=args.dataset.workers, pin_memory=True, drop_last=False)
@@ -146,15 +147,23 @@ def train(action_classifier, train_loader, val_loader, device, num_classes):
         source_label = source_label.to(device)
         data = {}
 
-        for clip in range(args.train.num_clips):
-            # in case of multi-clip training one clip per time is processed
-            for m in modalities:
-                data[m] = source_data[m][:, clip].to(device)
+        # for clip in range(args.train.num_clips):
+        #     # in case of multi-clip training one clip per time is processed
+        #     for m in modalities:
+        #         data[m] = source_data[m][:, clip].to(device)
 
-            logits, _ = action_classifier.forward(data)
-            action_classifier.compute_loss(logits, source_label, loss_weight=1)
-            action_classifier.backward(retain_graph=False)
-            action_classifier.compute_accuracy(logits, source_label)
+        #     logits, _ = action_classifier.forward(data)
+        #     action_classifier.compute_loss(logits, source_label, loss_weight=1)
+        #     action_classifier.backward(retain_graph=False)
+        #     action_classifier.compute_accuracy(logits, source_label)
+
+        for m in modalities:
+            data[m] = source_data[m].to(device)
+
+        logits, _ = action_classifier.forward(data)
+        action_classifier.compute_loss(logits, source_label, loss_weight=1)
+        action_classifier.backward(retain_graph=False)
+        action_classifier.compute_accuracy(logits, source_label)
 
         # update weights and zero gradients if total_batch samples are passed
         if gradient_accumulation_step:
@@ -203,21 +212,26 @@ def validate(model, val_loader, device, it, num_classes):
         for i_val, (data, label) in enumerate(val_loader):
             label = label.to(device)
 
-            for m in modalities:
-                batch = data[m].shape[0]
-                logits[m] = torch.zeros((args.test.num_clips, batch, num_classes)).to(device)
+            # for m in modalities:
+            #     batch = data[m].shape[0]
+            #     logits[m] = torch.zeros((args.test.num_clips, batch, num_classes)).to(device)
+
+            # clip = {}
+            # for i_c in range(args.test.num_clips):
+            #     for m in modalities:
+            #         clip[m] = data[m][:, i_c].to(device)
+
+            #     output, _ = model(clip)
+            #     for m in modalities:
+            #         logits[m][i_c] = output[m]
 
             clip = {}
-            for i_c in range(args.test.num_clips):
-                for m in modalities:
-                    clip[m] = data[m][:, i_c].to(device)
-
-                output, _ = model(clip)
-                for m in modalities:
-                    logits[m][i_c] = output[m]
-
             for m in modalities:
-                logits[m] = torch.mean(logits[m], dim=0)
+                clip[m] = data[m].to(device)
+
+            output, _ = model(clip)
+            for m in modalities:
+                logits[m] = output[m]
 
             model.compute_accuracy(logits, label)
 

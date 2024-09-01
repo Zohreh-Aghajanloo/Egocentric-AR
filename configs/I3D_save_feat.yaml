@@ -8,7 +8,7 @@ save:
   dense_sampling:
     RGB: True
   num_frames_per_clip:
-    RGB: 16
+    RGB: 5
 
 dataset:
   annotations_path: train_val
@@ -35,5 +35,3 @@ models:
     sgd_momentum: 0.9
     weight_decay: 1e-7
     weight_i3d_rgb: './pretrained_i3d/rgb_imagenet.pt'
-
-

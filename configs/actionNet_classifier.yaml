@@ -1,0 +1,45 @@
+action: train # train or test
+name: classify_AN_rgb_lstm
+modality: ["RGB"] # modality used
+early_fusion: False
+total_batch: 128 # total batch size if training is done with gradient accumulation
+batch_size: 32 # batch size for the forward
+gpus: null # gpus adopted
+resume_from: null # checkpoint directory
+models_dir: null # directory containing all the models
+
+num_iter: 7000 # number of training iterations with total_batch size
+lr_steps: 5000 # steps before reducing learning rate
+eval_freq: 50 # evaluation frequency
+
+loss_weights:
+  full: [0.15262663,0.36879731,0.36446701,0.44662505,0.36375516,0.68597659,0.92889099,0.92658032,1.07036002,1.60900772,1.93498851,1.70084606,1.78222626,2.0636304,2.04662246,0.49864162,0.52095844,1.56506423,0.51734068,0.45259452]
+  sub4: [0.08937633,0.32209206,0.23931139,0.30850987,0.23931139,0.50208468,0.86801081,0.88297651,0.94838218,1.13805861,1.60039492,2.84514653,2.43869703,2.84514653,2.43869703,0.36843624,0.44532728,0.88297651,0.36843624,0.22862785]
+
+dataset:
+  annotations_path: action-net/data
+  shift: D1-D1
+  workers: 4
+  features_name: save_actionNet
+  RGB:
+    data_path: null
+
+models:
+  RGB:
+    model: LSTM
+    kwargs: {}
+    lr: 0.1
+    sgd_momentum: 0.9
+    weight_decay: 1e-7
+  EMG:
+    model: EMG_LSTM
+    kwargs: {}
+    lr: 0.1
+    sgd_momentum: 0.9
+    weight_decay: 1e-7
+  fusion:
+    model: Early_Fusion
+    kwargs: {}
+    lr: 0.1
+    sgd_momentum: 0.9
+    weight_decay: 1e-7

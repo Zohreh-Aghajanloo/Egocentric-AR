@@ -8,6 +8,9 @@ import os
 import os.path
 from utils.logger import logger
 
+import random
+import numpy as np
+
 class EpicKitchensDataset(data.Dataset, ABC):
     def __init__(self, split, modalities, mode, dataset_conf, num_frames_per_clip, num_clips, dense_sampling,
                  transform=None, load_feat=False, additional_info=False, **kwargs):
@@ -58,6 +61,7 @@ class EpicKitchensDataset(data.Dataset, ABC):
                 model_features = pd.DataFrame(pd.read_pickle(os.path.join("saved_features",
                                                                           self.dataset_conf[m].features_name + "_" +
                                                                           pickle_name))['features'])[["uid", "features_" + m]]
+                # model_features.shape: (5, 1024)
                 if self.model_features is None:
                     self.model_features = model_features
                 else:
@@ -74,7 +78,47 @@ class EpicKitchensDataset(data.Dataset, ABC):
         # Remember that the returned array should have size              #
         #           num_clip x num_frames_per_clip                       #
         ##################################################################
-        raise NotImplementedError("You should implement _get_train_indices")
+
+
+        # for _ in range(self.num_clips):
+        #     max_start_idx = record.num_frames[modality] - (self.num_frames_per_clip[modality] - 1) * self.stride
+        #     start_idx = random.randint(0, max_start_idx - 1)
+        #     clip = [start_idx + self.stride * i for i in range(self.num_frames_per_clip[modality])]
+        #     indices += clip
+
+        clip_length = record.num_frames[modality] // self.num_clips
+        indices = []
+        clip_overlap = False
+
+        if clip_length < self.num_frames_per_clip[modality]:
+            clip_length = record.num_frames[modality]
+            clip_overlap = True
+        
+        for s in range(self.stride, 0, -1):
+            if clip_length > (self.num_frames_per_clip[modality] - 1) * s:
+                stride = s
+                break
+
+        if clip_overlap:
+            max_start_idx = clip_length - (self.num_frames_per_clip[modality] - 1) * stride
+            for _ in range(self.num_clips):
+                start_idx = random.randint(0, max_start_idx - 1)
+                samples = [start_idx + stride * i for i in range(self.num_frames_per_clip[modality])]
+                indices += samples
+            return(np.array(indices))
+
+        elif self.dense_sampling:
+            for offset in range(self.num_clips):
+                max_start_idx = (offset + 1) * clip_length - (self.num_frames_per_clip[modality] - 1) * stride
+                start_idx = random.randint(offset * clip_length, max_start_idx - 1)
+                samples = [start_idx + stride * i for i in range(self.num_frames_per_clip[modality])]
+                indices += samples
+        else:
+            space = clip_length // self.num_frames_per_clip[modality]
+            samples = [offset * clip_length + space * i for i in range(self.num_frames_per_clip[modality]) for offset in range(self.num_clips)]
+            indices += samples          
+
+        return(np.array(indices))
 
     def _get_val_indices(self, record, modality):
         ##################################################################
@@ -85,7 +129,39 @@ class EpicKitchensDataset(data.Dataset, ABC):
         # Remember that the returned array should have size              #
         #           num_clip x num_frames_per_clip                       #
         ##################################################################
-        raise NotImplementedError("You should implement _get_val_indices")
+
+        clip_length = record.num_frames[modality] // self.num_clips
+        indices = []
+        clip_overlap = False
+
+        if clip_length < self.num_frames_per_clip[modality]:
+            clip_length = record.num_frames[modality]
+            clip_overlap = True
+        
+        for s in range(self.stride, 0, -1):
+            if clip_length > (self.num_frames_per_clip[modality] - 1) * s:
+                stride = s
+                break
+
+        if clip_overlap:
+            max_start_idx = clip_length - (self.num_frames_per_clip[modality] - 1) * stride
+            for _ in range(self.num_clips):
+                start_idx = random.randint(0, max_start_idx - 1)
+                samples = [start_idx + stride * i for i in range(self.num_frames_per_clip[modality])]
+                indices += samples
+            return(np.array(indices))
+
+        if self.dense_sampling:
+            start_idx = int(clip_length / 2 - (self.num_frames_per_clip[modality] - 1) * stride / 2)
+            for offset in range(self.num_clips):
+                samples = [offset * start_idx + stride * i for i in range(self.num_frames_per_clip[modality])]
+                indices += samples
+        else:
+            space = clip_length // self.num_frames_per_clip[modality]
+            samples = [offset * clip_length + space * i for i in range(self.num_frames_per_clip[modality]) for offset in range(self.num_clips)]
+            indices += samples
+
+        return(np.array(indices))
 
     def __getitem__(self, index):
 
@@ -166,3 +242,94 @@ class EpicKitchensDataset(data.Dataset, ABC):
 
     def __len__(self):
         return len(self.video_list)
+
+
+class ActionNet(data.Dataset, ABC):
+    def __init__(self, modalities, mode, dataset_conf, transform=None, load_feat=False, additional_info=False, **kwargs):
+        self.modalities = modalities 
+        self.mode = mode  
+        self.dataset_conf = dataset_conf
+        self.additional_info = additional_info
+
+        if 'RGB' in self.modalities:
+            pickle_name = "multimodal_" + self.mode + "_set.pkl"
+        elif self.mode == "train":
+            pickle_name = "train_set.pkl"
+        else:
+            pickle_name = "test_set.pkl"
+
+        self.list_file = pd.read_pickle(os.path.join(self.dataset_conf.annotations_path, pickle_name))
+        logger.info(f"Dataloader for {self.mode} with {len(self.list_file)} samples generated")
+        self.record_list = [row for idx, row in self.list_file.iterrows()]
+        self.transform = transform
+        self.load_feat = load_feat
+
+        if self.load_feat and 'RGB' in self.modalities:
+            self.model_features = pd.DataFrame(pd.read_pickle(os.path.join("action-net", "saved_features", self.dataset_conf.features_name
+                                                                           + "_" + self.mode + ".pkl"))['features'])
+            self.model_features = pd.merge(self.model_features, self.list_file, how="inner", left_on='index', right_index=True)
+
+    def __getitem__(self, index):
+        samples = {}
+        record = self.record_list[index]
+        label = record['label']
+
+        if 'EMG' in self.modalities:
+            left_arm = record['myo_left_readings']
+            right_arm = record['myo_right_readings']
+            samples['EMG'] = np.float32(np.concatenate((left_arm, right_arm), axis=1))
+
+        if 'RGB' in self.modalities:            
+            if self.load_feat:
+                sample_row = self.model_features[self.model_features['index'] == record.name]
+                assert len(sample_row) == 1
+                samples['RGB'] = sample_row['featuresRGB'].values[0]
+            else:
+                segment_indices = self.get_frame_indices(record)
+                img = self.get('RGB', segment_indices)
+                samples['RGB'] = img
+
+        if self.additional_info:
+            return samples, label, record.name
+        else:
+            return samples, label
+    
+    def get_frame_indices(self, record, fps=30, first_frame=1655239114.183343):
+        start_time = record['start'] - first_frame
+        stop_time = record['stop'] - first_frame
+        start_frame = int(start_time * fps) + 1
+        stop_frame = int(stop_time * fps) + 1
+        return(list(range(start_frame, stop_frame)))
+    
+    def get(self, modality, indices):
+        images = list()
+        for frame_index in indices:
+            p = int(frame_index)
+            frame = self._load_data('RGB', p)
+            images.extend(frame)
+        process_data = self.transform[modality](images)
+        return process_data
+        
+    def _load_data(self, modality, idx):
+        data_path = self.dataset_conf[modality].data_path
+        tmpl = self.dataset_conf[modality].tmpl
+
+        if modality == 'RGB':
+            try:
+                img = Image.open(os.path.join(data_path, tmpl.format(idx))) \
+                    .convert('RGB')
+            except FileNotFoundError:
+                print("Img not found")
+                max_idx_video = int(sorted(glob.glob(os.path.join(data_path, "frame_*")))[-1].split("_")[-1].split(".")[0])
+                if idx > max_idx_video:
+                    img = Image.open(os.path.join(data_path, tmpl.format(max_idx_video))) \
+                        .convert('RGB')
+                else:
+                    raise FileNotFoundError
+            return [img]
+        
+        else:
+            raise NotImplementedError("Modality not implemented")
+    
+    def __len__(self):
+        return len(self.record_list)
