@@ -1,0 +1,88 @@
+Feature Extraction
+Running with parameters: 
+  action: save
+  name: save_train_uniform_k25
+  modality: ['RGB']
+  total_batch: 128
+  batch_size: 32
+  gpus: None
+  wandb_name: None
+  resume_from: ./saved_models/I3D_SourceOnlyD1
+  logname: save_D1-D1.log
+  models_dir: saved_models/save_train_uniform_k25/Sep01_20-30-03
+  train:
+    num_iter: 7000
+    lr_steps: 5000
+    eval_freq: 50
+    num_clips: 5
+    dense_sampling:
+      RGB: True
+    num_frames_per_clip:
+      RGB: 5
+  test:
+    num_clips: 5
+    dense_sampling:
+      RGB: True
+    num_frames_per_clip:
+      RGB: 5
+  dataset:
+    annotations_path: train_val
+    shift: D1-D1
+    workers: 4
+    stride: 2
+    resolution: 224
+    RGB:
+      data_path: ../ek_data/frames
+      tmpl: img_{:010d}.jpg
+      features_name: save_dense_k5
+    Event:
+      rgb4e: 6
+  models:
+    RGB:
+      model: I3D
+      normalize: False
+      kwargs:
+      lr_steps: 3000
+      lr: 0.01
+      sgd_momentum: 0.9
+      weight_decay: 1e-07
+      dropout: 0.5
+      resolution: 224
+      weight_i3d_rgb: ./pretrained_i3d/rgb_imagenet.pt
+  split: train
+  save:
+    num_clips: 5
+    dense_sampling:
+      RGB: False
+    num_frames_per_clip:
+      RGB: 25
+  config: configs/I3D_save_feat.yaml
+  experiment_dir: save_train_uniform_k25/Sep01_20-30-03
+  log_dir: TEST_RESULTS/save_train_uniform_k25
+  logfile: TEST_RESULTS/save_train_uniform_k25/save_D1-D1.log
+Instantiating models per modality
+I3D Net	Modality: RGB
+Loading Kinetics weights I3D
+ * Skipping Logits weight for 'logits.conv3d.weight'
+ * Skipping Logits weight for 'logits.conv3d.bias'
+Restoring action-classifier for modality RGB from saved_models/I3D_SourceOnlyD1/Oct25_22-38-50/action-classifier_RGB_9.pth
+RGB-Model for action-classifier restored at iter 4850.0
+Best accuracy on val: 59.54 at iter 4000.0
+Last accuracy on val: 58.85
+Last loss: 0.00
+Dataloader for D1-train with 1543 samples generated
+[308/1543] top1= 69.481% top5 = 97.078%
+[616/1543] top1= 69.968% top5 = 97.565%
+[924/1543] top1= 70.346% top5 = 97.727%
+[1232/1543] top1= 70.455% top5 = 97.565%
+[1540/1543] top1= 70.714% top5 = 97.792%
+Final accuracy: top1 = 70.77%	top5 = 97.80%
+Class 0 = [354/421] = 84.09%
+Class 1 = [229/383] = 59.79%
+Class 2 = [177/231] = 76.62%
+Class 3 = [98/128] = 76.56%
+Class 4 = [183/223] = 82.06%
+Class 5 = [20/71] = 28.17%
+Class 6 = [22/42] = 52.38%
+Class 7 = [9/44] = 20.45%
+Accuracy by averaging class accuracies (same weight for each class): 60.016225277085084%

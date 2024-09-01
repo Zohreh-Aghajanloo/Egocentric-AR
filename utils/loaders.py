@@ -107,7 +107,7 @@ class EpicKitchensDataset(data.Dataset, ABC):
                 indices += samples
             return(np.array(indices))
 
-        elif self.dense_sampling:
+        elif self.dense_sampling[modality]:
             for offset in range(self.num_clips):
                 max_start_idx = (offset + 1) * clip_length - (self.num_frames_per_clip[modality] - 1) * stride
                 start_idx = random.randint(offset * clip_length, max_start_idx - 1)
@@ -151,7 +151,7 @@ class EpicKitchensDataset(data.Dataset, ABC):
                 indices += samples
             return(np.array(indices))
 
-        if self.dense_sampling:
+        if self.dense_sampling[modality]:
             start_idx = int(clip_length / 2 - (self.num_frames_per_clip[modality] - 1) * stride / 2)
             for offset in range(self.num_clips):
                 samples = [offset * start_idx + stride * i for i in range(self.num_frames_per_clip[modality])]
